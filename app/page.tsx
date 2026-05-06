@@ -4,6 +4,8 @@ import { format } from 'date-fns';
 import { pl } from 'date-fns/locale';
 import { MapPin, RefreshCw } from 'lucide-react';
 
+export const preferredRegion = 'fra1'; // Frankfurt — closest to Warsaw, avoids geo-blocks
+
 async function getEvents(): Promise<{ events: WarsawEvent[]; lastUpdated: string }> {
   try {
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL ?? 'http://localhost:3000';

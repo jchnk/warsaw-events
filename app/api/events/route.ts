@@ -8,6 +8,7 @@ import { WarsawEvent } from '@/types/event';
 
 export const maxDuration = 60;
 export const revalidate = 1800;
+export const preferredRegion = 'fra1'; // Frankfurt — closest to Warsaw, avoids geo-blocks
 
 export async function GET() {
   const [luma, meetup, extra, eventbrite, crossweb] = await Promise.all([
