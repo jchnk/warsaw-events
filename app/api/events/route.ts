@@ -13,7 +13,7 @@ export const preferredRegion = 'fra1'; // Frankfurt — closest to Warsaw, avoid
 export async function GET() {
   const [luma, ethwarsaw, meetup, extra, eventbrite, crossweb] = await Promise.all([
     fetchLumaEvents(),
-    fetchETHWarsawEvents(), // calendarApiId endpoint — works from all regions
+    fetchETHWarsawEvents(),
     fetchMeetupEvents(),
     fetchExtraEvents(),
     fetchEventbriteEvents(),

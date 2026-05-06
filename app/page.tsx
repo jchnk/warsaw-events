@@ -5,7 +5,7 @@ import { pl } from 'date-fns/locale';
 import { MapPin, RefreshCw } from 'lucide-react';
 
 export const preferredRegion = 'fra1'; // Frankfurt — closest to Warsaw, avoids geo-blocking
-export const dynamic = 'force-dynamic';  // always render fresh — no stale DC build cache
+export const revalidate = 1800;          // ISR: re-render every 30 min from Frankfurt
 
 async function getEvents(): Promise<{ events: WarsawEvent[]; lastUpdated: string }> {
   const { fetchLumaEvents, fetchETHWarsawEvents } = await import('@/lib/luma');

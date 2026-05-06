@@ -1,172 +1,14 @@
 import { WarsawEvent } from '@/types/event';
 
-const WARSAW_PLACE_ID = 'discplace-PTcuEQVHuySJe8N';
-const ETHWARSAW_CAL_ID = 'cal-3hRtC8aF6Ea2F9N';
-const API_BASE = 'https://api.lu.ma/discover/get-paginated-events';
-const MAX_PAGES = 4;
+// ── ETHWarsaw events to feature ───────────────────────────────────────────────
+// Add new ETHWarsaw event slugs here (from lu.ma/<slug> or luma.com/<slug>)
+const ETHWARSAW_SLUGS = [
+  'ZircuitETHWarsaw',
+];
 
-// Cities that are definitely NOT Warsaw (Luma sometimes includes suburbs)
-const WARSAW_CITIES = new Set(['warsaw', 'warszawa', '']);
-
-function isWarsawCity(city: string): boolean {
-  return WARSAW_CITIES.has(city.toLowerCase().trim());
-}
-
-// ── Warsaw city events ────────────────────────────────────────────────────────
+// ── Warsaw general events (HTML fallback — works from any IP) ─────────────────
 
 export async function fetchLumaEvents(): Promise<WarsawEvent[]> {
-  try {
-    const entries = await fetchPages({ placeApiId: WARSAW_PLACE_ID });
-
-    const now = Date.now() - 24 * 60 * 60 * 1000;
-
-    const mapped = entries
-      .map((entry, idx) => ({ event: mapLumaEntry(entry), score: entry.score ?? 0, idx }))
-      .filter((x): x is { event: WarsawEvent; score: number; idx: number } => x.event !== null)
-      .filter(x => new Date(x.event.startDate).getTime() >= now);
-
-    mapped.sort((a, b) =>
-      new Date(a.event.startDate).getTime() - new Date(b.event.startDate).getTime()
-    );
-
-    // If API returns suspiciously few results (geo-blocked datacenter IP), use HTML fallback
-    if (mapped.length < 5) {
-      console.log(`[Luma API] Only ${mapped.length} events — likely geo-blocked, trying HTML fallback`);
-      const fallback = await fetchLumaHtmlFallback();
-      return fallback.length > mapped.length ? fallback : mapped.map(x => x.event);
-    }
-
-    console.log(`[Luma API] ${mapped.length} Warsaw events`);
-    return mapped.map(x => x.event);
-  } catch (err) {
-    console.error('[Luma API]', err);
-    return fetchLumaHtmlFallback();
-  }
-}
-
-// ── ETHWarsaw featured calendar ───────────────────────────────────────────────
-// Luma API blocks datacenter IPs — scrape lu.ma/ethwarsaw HTML JSON-LD instead
-
-export async function fetchETHWarsawEvents(): Promise<WarsawEvent[]> {
-  try {
-    const res = await fetch('https://lu.ma/ethwarsaw', {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36',
-        Accept: 'text/html,application/xhtml+xml',
-        'Accept-Language': 'pl,en;q=0.8',
-      },
-      cache: 'no-store',
-    });
-    if (!res.ok) return [];
-    const html = await res.text();
-
-    const match = html.match(
-      /type="application\/ld\+json"[^>]*>\s*(\{[\s\S]*?"@type"\s*:\s*"ItemList"[\s\S]*?)\s*<\/script>/
-    );
-    if (!match) return [];
-
-    const data = JSON.parse(match[1]);
-    const now = Date.now() - 24 * 60 * 60 * 1000;
-
-    const events = (data.itemListElement ?? [])
-      .map((item: any) => mapLumaJsonLd(item, true /* featured */))
-      .filter((e: WarsawEvent | null): e is WarsawEvent =>
-        e !== null && new Date(e.startDate).getTime() >= now
-      );
-
-    console.log(`[ETHWarsaw HTML] ${events.length} featured events`);
-    return events;
-  } catch (err) {
-    console.error('[ETHWarsaw HTML]', err);
-    return [];
-  }
-}
-
-// ── Shared paginator ──────────────────────────────────────────────────────────
-
-async function fetchPages(params: Record<string, string>): Promise<any[]> {
-  const all: any[] = [];
-  let cursor: string | null = null;
-
-  for (let page = 0; page < MAX_PAGES; page++) {
-    const p = new URLSearchParams({ ...params, pagination_limit: '50' });
-    if (cursor) p.set('pagination_cursor', cursor);
-
-    const res = await fetch(`${API_BASE}?${p}`, {
-      headers: {
-        Accept: 'application/json',
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
-      },
-      cache: 'no-store', // always fresh — page-level revalidate handles caching
-    });
-
-    if (!res.ok) throw new Error(`Luma API ${res.status}`);
-    const data = await res.json();
-    all.push(...(data.entries ?? []));
-    if (!data.has_more || !data.next_cursor) break;
-    cursor = data.next_cursor;
-  }
-
-  return all;
-}
-
-// ── Entry mapper ──────────────────────────────────────────────────────────────
-
-const ETHWARSAW_CAL_IDS = new Set([
-  'cal-3hRtC8aF6Ea2F9N',  // ETHWarsaw Event Calendar
-]);
-
-function mapLumaEntry(entry: any, forceFeatured = false): WarsawEvent | null {
-  const event = entry?.event;
-  if (!event?.name || !event?.start_at) return null;
-
-  const geo = event.geo_address_info ?? {};
-  const pl = geo.localized?.pl ?? {};
-
-  // Filter out events not in Warsaw
-  const city = geo.city ?? pl.city ?? '';
-  if (city && !isWarsawCity(city)) return null;
-
-  const locationStr = pl.address || geo.address || geo.city_state || 'Warszawa';
-  const fullAddress = pl.full_address || geo.full_address;
-
-  const ticket = entry.ticket_info ?? {};
-  const isFree = ticket.is_free ?? true;
-  const priceCents = ticket.price?.cents;
-  const priceCurrency = (ticket.price?.currency ?? 'PLN').toUpperCase();
-  const price = !isFree && priceCents != null
-    ? `${(priceCents / 100).toFixed(0)} ${priceCurrency}`
-    : undefined;
-
-  const cal = entry.calendar ?? {};
-  const calName = cal.name && cal.name !== 'Personal' ? cal.name : undefined;
-  const isETHWarsaw = ETHWARSAW_CAL_IDS.has(event.calendar_api_id ?? '') ||
-    ETHWARSAW_CAL_IDS.has(cal.api_id ?? '');
-  const slug = event.url ?? event.api_id;
-
-  return {
-    id: `luma-${event.api_id}`,
-    title: event.name,
-    description: '',
-    startDate: new Date(event.start_at).toISOString(),
-    endDate: event.end_at ? new Date(event.end_at).toISOString() : undefined,
-    location: locationStr,
-    address: fullAddress,
-    city: city || 'Warszawa',
-    url: `https://lu.ma/${slug}`,
-    imageUrl: event.cover_url ?? undefined,
-    source: 'luma',
-    isFree,
-    price,
-    organizer: calName,
-    attendeeCount: entry.guest_count ?? undefined,
-    featured: forceFeatured || isETHWarsaw,
-  };
-}
-
-// ── HTML fallback ─────────────────────────────────────────────────────────────
-
-async function fetchLumaHtmlFallback(): Promise<WarsawEvent[]> {
   try {
     const res = await fetch('https://lu.ma/warsaw', {
       headers: {
@@ -177,33 +19,90 @@ async function fetchLumaHtmlFallback(): Promise<WarsawEvent[]> {
       next: { revalidate: 1800 },
     });
     if (!res.ok) return [];
+
     const html = await res.text();
     const match = html.match(
       /type="application\/ld\+json"[^>]*>\s*(\{[\s\S]*?"@type"\s*:\s*"ItemList"[\s\S]*?)\s*<\/script>/
     );
     if (!match) return [];
+
     const data = JSON.parse(match[1]);
     const now = Date.now() - 24 * 60 * 60 * 1000;
-    return (data.itemListElement ?? [])
-      .map(mapLumaJsonLd)
+
+    const events = (data.itemListElement ?? [])
+      .map((item: any) => mapLumaJsonLd(item))
       .filter((e: WarsawEvent | null): e is WarsawEvent =>
         e !== null && new Date(e.startDate).getTime() >= now
       );
-  } catch {
+
+    console.log(`[Luma] ${events.length} Warsaw events`);
+    return events;
+  } catch (err) {
+    console.error('[Luma]', err);
     return [];
   }
 }
 
+// ── ETHWarsaw featured events (fetched by slug — reliable from any IP) ────────
+
+export async function fetchETHWarsawEvents(): Promise<WarsawEvent[]> {
+  const results = await Promise.allSettled(
+    ETHWARSAW_SLUGS.map(fetchLumaEventBySlug)
+  );
+  const events = results
+    .filter((r): r is PromiseFulfilledResult<WarsawEvent | null> => r.status === 'fulfilled')
+    .map(r => r.value)
+    .filter((e): e is WarsawEvent => e !== null);
+
+  console.log(`[ETHWarsaw] ${events.length} featured events`);
+  return events;
+}
+
+async function fetchLumaEventBySlug(slug: string): Promise<WarsawEvent | null> {
+  try {
+    const res = await fetch(`https://lu.ma/${slug}`, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36',
+        Accept: 'text/html,application/xhtml+xml',
+      },
+      next: { revalidate: 1800 },
+    });
+    if (!res.ok) return null;
+
+    const html = await res.text();
+    const match = html.match(
+      /type="application\/ld\+json"[^>]*>\s*(\{[\s\S]*?"@type"\s*:\s*"Event"[\s\S]*?)\s*<\/script>/
+    );
+    if (!match) return null;
+
+    const e = JSON.parse(match[1]);
+    const now = Date.now() - 24 * 60 * 60 * 1000;
+    if (!e?.startDate || new Date(e.startDate).getTime() < now) return null;
+
+    return mapLumaJsonLd({ item: e }, true /* featured */);
+  } catch {
+    return null;
+  }
+}
+
+// ── JSON-LD event mapper ──────────────────────────────────────────────────────
+
 function mapLumaJsonLd(item: any, featured = false): WarsawEvent | null {
   const e = item.item ?? item;
   if (!e?.name || !e?.startDate) return null;
+
   const loc = e.location ?? {};
   const addr = loc.address ?? {};
-  const locationStr = loc.name ?? [addr.streetAddress, addr.addressLocality].filter(Boolean).join(', ') ?? 'Warszawa';
+  const locationStr =
+    loc.name ??
+    [addr.streetAddress, addr.addressLocality].filter(Boolean).join(', ') ??
+    'Warszawa';
+
   const offer = e.offers?.[0] ?? {};
   const isFree = !offer.price || offer.price === 0;
   const imageRaw = Array.isArray(e.image) ? e.image[0] : e.image;
   const slug = (e['@id'] ?? e.url ?? '').replace(/https?:\/\/(?:lu\.ma|luma\.com)\//, '');
+
   return {
     id: `luma-${slug}`,
     title: e.name,
@@ -216,7 +115,7 @@ function mapLumaJsonLd(item: any, featured = false): WarsawEvent | null {
     imageUrl: typeof imageRaw === 'string' ? imageRaw : undefined,
     source: 'luma',
     isFree,
-    price: !isFree ? `${offer.price} ${(offer.priceCurrency ?? 'PLN').toUpperCase()}` : undefined,
+    price: !isFree && offer.price ? `${offer.price} ${(offer.priceCurrency ?? 'PLN').toUpperCase()}` : undefined,
     organizer: Array.isArray(e.organizer) ? e.organizer[0]?.name : e.organizer?.name,
     featured,
   };
