@@ -45,18 +45,39 @@ export async function fetchLumaEvents(): Promise<WarsawEvent[]> {
 }
 
 // ── ETHWarsaw featured calendar ───────────────────────────────────────────────
+// Luma API blocks datacenter IPs — scrape lu.ma/ethwarsaw HTML JSON-LD instead
 
 export async function fetchETHWarsawEvents(): Promise<WarsawEvent[]> {
   try {
-    const entries = await fetchPages({ calendarApiId: ETHWARSAW_CAL_ID });
+    const res = await fetch('https://lu.ma/ethwarsaw', {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36',
+        Accept: 'text/html,application/xhtml+xml',
+        'Accept-Language': 'pl,en;q=0.8',
+      },
+      cache: 'no-store',
+    });
+    if (!res.ok) return [];
+    const html = await res.text();
+
+    const match = html.match(
+      /type="application\/ld\+json"[^>]*>\s*(\{[\s\S]*?"@type"\s*:\s*"ItemList"[\s\S]*?)\s*<\/script>/
+    );
+    if (!match) return [];
+
+    const data = JSON.parse(match[1]);
     const now = Date.now() - 24 * 60 * 60 * 1000;
 
-    return entries
-      .map(entry => mapLumaEntry(entry, true /* featured */))
-      .filter((e): e is WarsawEvent => e !== null)
-      .filter(e => new Date(e.startDate).getTime() >= now);
+    const events = (data.itemListElement ?? [])
+      .map((item: any) => mapLumaJsonLd(item, true /* featured */))
+      .filter((e: WarsawEvent | null): e is WarsawEvent =>
+        e !== null && new Date(e.startDate).getTime() >= now
+      );
+
+    console.log(`[ETHWarsaw HTML] ${events.length} featured events`);
+    return events;
   } catch (err) {
-    console.error('[ETHWarsaw API]', err);
+    console.error('[ETHWarsaw HTML]', err);
     return [];
   }
 }
@@ -173,7 +194,7 @@ async function fetchLumaHtmlFallback(): Promise<WarsawEvent[]> {
   }
 }
 
-function mapLumaJsonLd(item: any): WarsawEvent | null {
+function mapLumaJsonLd(item: any, featured = false): WarsawEvent | null {
   const e = item.item ?? item;
   if (!e?.name || !e?.startDate) return null;
   const loc = e.location ?? {};
@@ -197,5 +218,6 @@ function mapLumaJsonLd(item: any): WarsawEvent | null {
     isFree,
     price: !isFree ? `${offer.price} ${(offer.priceCurrency ?? 'PLN').toUpperCase()}` : undefined,
     organizer: Array.isArray(e.organizer) ? e.organizer[0]?.name : e.organizer?.name,
+    featured,
   };
 }
