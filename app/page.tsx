@@ -5,26 +5,55 @@ import { pl } from 'date-fns/locale';
 import { MapPin, RefreshCw } from 'lucide-react';
 
 export const preferredRegion = 'fra1'; // Frankfurt — closest to Warsaw, avoids geo-blocks
+export const revalidate = 1800; // Re-fetch every 30 minutes
 
 async function getEvents(): Promise<{ events: WarsawEvent[]; lastUpdated: string }> {
-  try {
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL ?? 'http://localhost:3000';
-    const res = await fetch(`${baseUrl}/api/events`, { next: { revalidate: 1800 } });
-    if (!res.ok) throw new Error('fetch failed');
-    return res.json();
-  } catch {
-    const { fetchLumaEvents } = await import('@/lib/luma');
-    const { fetchMeetupEvents } = await import('@/lib/meetup');
-    const { fetchEventbriteEvents } = await import('@/lib/eventbrite');
-    const { fetchExtraEvents } = await import('@/lib/extra');
-    const { fetchCrosswebEvents } = await import('@/lib/crossweb');
-    const [luma, meetup, eventbrite, extra, crossweb] = await Promise.all([
-      fetchLumaEvents(), fetchMeetupEvents(), fetchEventbriteEvents(), fetchExtraEvents(), fetchCrosswebEvents(),
-    ]);
-    const events = [...luma, ...meetup, ...eventbrite, ...extra, ...crossweb]
-      .sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
-    return { events, lastUpdated: new Date().toISOString() };
-  }
+  const { fetchLumaEvents } = await import('@/lib/luma');
+  const { fetchMeetupEvents } = await import('@/lib/meetup');
+  const { fetchEventbriteEvents } = await import('@/lib/eventbrite');
+  const { fetchExtraEvents } = await import('@/lib/extra');
+  const { fetchCrosswebEvents } = await import('@/lib/crossweb');
+
+  const [luma, meetup, extra, eventbrite, crossweb] = await Promise.all([
+    fetchLumaEvents(),
+    fetchMeetupEvents(),
+    fetchExtraEvents(),
+    fetchEventbriteEvents(),
+    fetchCrosswebEvents(),
+  ]);
+
+  // Filter online-only Meetup events
+  const meetupPhysical = [...meetup, ...extra].filter(
+    e => e.source === 'meetup' && e.location !== 'Online event'
+  );
+
+  const seenIds = new Set<string>();
+  const seenTitles = new Set<string>();
+  const titleCount = new Map<string, number>();
+  const MAX_RECURRING = 2;
+  const now = Date.now() - 24 * 60 * 60 * 1000;
+
+  const events = [...luma, ...meetupPhysical, ...eventbrite, ...crossweb]
+    .sort((a, b) => {
+      if (a.featured && !b.featured) return -1;
+      if (!a.featured && b.featured) return 1;
+      return new Date(a.startDate).getTime() - new Date(b.startDate).getTime();
+    })
+    .filter((e) => {
+      if (new Date(e.startDate).getTime() < now) return false;
+      if (seenIds.has(e.id)) return false;
+      seenIds.add(e.id);
+      const titleKey = `${e.title.toLowerCase().trim()}|${e.startDate.slice(0, 10)}`;
+      if (seenTitles.has(titleKey)) return false;
+      seenTitles.add(titleKey);
+      const baseTitle = e.title.toLowerCase().trim();
+      const count = titleCount.get(baseTitle) ?? 0;
+      if (count >= MAX_RECURRING) return false;
+      titleCount.set(baseTitle, count + 1);
+      return true;
+    });
+
+  return { events, lastUpdated: new Date().toISOString() };
 }
 
 export default async function Home() {
