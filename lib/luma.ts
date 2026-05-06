@@ -17,20 +17,24 @@ function isWarsawCity(city: string): boolean {
 export async function fetchLumaEvents(): Promise<WarsawEvent[]> {
   try {
     const entries = await fetchPages({ placeApiId: WARSAW_PLACE_ID });
-    if (entries.length === 0) return fetchLumaHtmlFallback();
 
     const now = Date.now() - 24 * 60 * 60 * 1000;
 
-    // Map entries keeping score/featured metadata for sorting
     const mapped = entries
       .map((entry, idx) => ({ event: mapLumaEntry(entry), score: entry.score ?? 0, idx }))
       .filter((x): x is { event: WarsawEvent; score: number; idx: number } => x.event !== null)
       .filter(x => new Date(x.event.startDate).getTime() >= now);
 
-    // Sort: by date ascending (API already pre-sorts by relevance; we respect date order for UX)
     mapped.sort((a, b) =>
       new Date(a.event.startDate).getTime() - new Date(b.event.startDate).getTime()
     );
+
+    // If API returns suspiciously few results (geo-blocked datacenter IP), use HTML fallback
+    if (mapped.length < 5) {
+      console.log(`[Luma API] Only ${mapped.length} events — likely geo-blocked, trying HTML fallback`);
+      const fallback = await fetchLumaHtmlFallback();
+      return fallback.length > mapped.length ? fallback : mapped.map(x => x.event);
+    }
 
     console.log(`[Luma API] ${mapped.length} Warsaw events`);
     return mapped.map(x => x.event);
