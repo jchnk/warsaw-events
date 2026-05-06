@@ -9,14 +9,15 @@ export const dynamic = 'force-dynamic';  // Skip static build; render from Frank
 // Individual fetch() calls in scrapers use { next: { revalidate: 1800 } } for data caching
 
 async function getEvents(): Promise<{ events: WarsawEvent[]; lastUpdated: string }> {
-  const { fetchLumaEvents } = await import('@/lib/luma');
+  const { fetchLumaEvents, fetchETHWarsawEvents } = await import('@/lib/luma');
   const { fetchMeetupEvents } = await import('@/lib/meetup');
   const { fetchEventbriteEvents } = await import('@/lib/eventbrite');
   const { fetchExtraEvents } = await import('@/lib/extra');
   const { fetchCrosswebEvents } = await import('@/lib/crossweb');
 
-  const [luma, meetup, extra, eventbrite, crossweb] = await Promise.all([
+  const [luma, ethwarsaw, meetup, extra, eventbrite, crossweb] = await Promise.all([
     fetchLumaEvents(),
+    fetchETHWarsawEvents(), // calendarApiId endpoint — works from all regions
     fetchMeetupEvents(),
     fetchExtraEvents(),
     fetchEventbriteEvents(),
@@ -34,7 +35,7 @@ async function getEvents(): Promise<{ events: WarsawEvent[]; lastUpdated: string
   const MAX_RECURRING = 2;
   const now = Date.now() - 24 * 60 * 60 * 1000;
 
-  const events = [...luma, ...meetupPhysical, ...eventbrite, ...crossweb]
+  const events = [...ethwarsaw, ...luma, ...meetupPhysical, ...eventbrite, ...crossweb]
     .sort((a, b) => {
       if (a.featured && !b.featured) return -1;
       if (!a.featured && b.featured) return 1;

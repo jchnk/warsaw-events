@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { fetchLumaEvents } from '@/lib/luma';
+import { fetchLumaEvents, fetchETHWarsawEvents } from '@/lib/luma';
 import { fetchMeetupEvents } from '@/lib/meetup';
 import { fetchEventbriteEvents } from '@/lib/eventbrite';
 import { fetchExtraEvents } from '@/lib/extra';
@@ -11,8 +11,9 @@ export const revalidate = 1800;
 export const preferredRegion = 'fra1'; // Frankfurt — closest to Warsaw, avoids geo-blocks
 
 export async function GET() {
-  const [luma, meetup, extra, eventbrite, crossweb] = await Promise.all([
+  const [luma, ethwarsaw, meetup, extra, eventbrite, crossweb] = await Promise.all([
     fetchLumaEvents(),
+    fetchETHWarsawEvents(), // calendarApiId endpoint — works from all regions
     fetchMeetupEvents(),
     fetchExtraEvents(),
     fetchEventbriteEvents(),
@@ -30,7 +31,7 @@ export async function GET() {
   const MAX_RECURRING = 2;
   const now = Date.now() - 24 * 60 * 60 * 1000;
 
-  const events: WarsawEvent[] = [...luma, ...meetupPhysical, ...eventbrite, ...crossweb]
+  const events: WarsawEvent[] = [...ethwarsaw, ...luma, ...meetupPhysical, ...eventbrite, ...crossweb]
     .sort((a, b) => {
       if (a.featured && !b.featured) return -1;
       if (!a.featured && b.featured) return 1;
