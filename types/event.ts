@@ -8,12 +8,14 @@ export interface WarsawEvent {
   endDate?: string;
   location: string;
   address?: string;
+  city?: string;       // explicit city for Warsaw filtering
   url: string;
   imageUrl?: string;
   source: EventSource;
   category?: string;
   isFree?: boolean;
   price?: string;
-  organizer?: string;
+  organizer?: string;  // calendar/community name
   attendeeCount?: number;
+  featured?: boolean;  // pinned to top (e.g. ETHWarsaw)
 }

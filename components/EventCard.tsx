@@ -2,7 +2,7 @@ import { WarsawEvent } from '@/types/event';
 import { SourceBadge } from './SourceBadge';
 import { format, isValid } from 'date-fns';
 import { pl } from 'date-fns/locale';
-import { MapPin, Users, ExternalLink, Calendar } from 'lucide-react';
+import { MapPin, Users, ExternalLink, Calendar, Star } from 'lucide-react';
 
 export function EventCard({ event }: { event: WarsawEvent }) {
   const start = new Date(event.startDate);
@@ -32,6 +32,12 @@ export function EventCard({ event }: { event: WarsawEvent }) {
         )}
         <div className="absolute top-3 left-3 flex gap-1.5">
           <SourceBadge source={event.source} />
+          {event.featured && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-400 text-amber-900">
+              <Star className="w-3 h-3 fill-amber-900" />
+              ETHWarsaw
+            </span>
+          )}
           {event.category && (
             <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-white/90 text-gray-700 border border-white/50 backdrop-blur-sm">
               {event.category}
