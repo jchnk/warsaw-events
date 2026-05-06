@@ -76,7 +76,7 @@ async function fetchPages(params: Record<string, string>): Promise<any[]> {
         Accept: 'application/json',
         'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
       },
-      next: { revalidate: 1800 },
+      cache: 'no-store', // always fresh — page-level revalidate handles caching
     });
 
     if (!res.ok) throw new Error(`Luma API ${res.status}`);

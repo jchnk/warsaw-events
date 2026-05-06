@@ -5,8 +5,7 @@ import { pl } from 'date-fns/locale';
 import { MapPin, RefreshCw } from 'lucide-react';
 
 export const preferredRegion = 'fra1'; // Frankfurt — closest to Warsaw, avoids geo-blocking
-export const dynamic = 'force-dynamic';  // Skip static build; render from Frankfurt on first request
-// Individual fetch() calls in scrapers use { next: { revalidate: 1800 } } for data caching
+export const dynamic = 'force-dynamic';  // always render fresh — no stale DC build cache
 
 async function getEvents(): Promise<{ events: WarsawEvent[]; lastUpdated: string }> {
   const { fetchLumaEvents, fetchETHWarsawEvents } = await import('@/lib/luma');
